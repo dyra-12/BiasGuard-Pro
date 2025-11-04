@@ -1,0 +1,72 @@
+{
+  "biased_examples": [
+    "Women should be nurses because they are compassionate.",
+    "Men are naturally better at engineering roles.",
+    "The female secretary was very emotional today.",
+    "He needs to be more aggressive to succeed in business.",
+    "Women are too emotional for leadership positions.",
+    "She is too sensitive for management roles.",
+    "Men don't have the patience for teaching young children.",
+    "Women are better suited for administrative support roles.",
+    "He should be more logical and less emotional in decision-making.",
+    "Female employees are more detail-oriented and organized.",
+    "Male leaders are more assertive and commanding.",
+    "Women are naturally more nurturing and caring.",
+    "Men are better at handling pressure in high-stakes situations.",
+    "She would make a great receptionist with her friendly personality.",
+    "He has the natural authority to be a great CEO.",
+    "Women excel in roles that require empathy and understanding.",
+    "Men are more competitive and driven to succeed.",
+    "The female engineer was surprisingly good at technical tasks.",
+    "He's too emotional to handle customer complaints effectively.",
+    "Women make better HR professionals because they're more people-oriented."
+  ],
+  "neutral_examples": [
+    "People with technical skills excel in engineering roles.",
+    "The candidate demonstrated strong problem-solving abilities.",
+    "Effective leadership requires emotional intelligence and strategic thinking.",
+    "Healthcare professionals benefit from strong communication skills.",
+    "Successful managers demonstrate both analytical and interpersonal skills.",
+    "The team member showed excellent collaboration skills during the project.",
+    "Individuals with strong organizational abilities thrive in administrative roles.",
+    "Critical thinking is valuable across all professional domains.",
+    "Adaptability is a key skill in today's rapidly changing work environment.",
+    "Strong communicators excel in client-facing roles.",
+    "The presentation demonstrated thorough research and clear reasoning.",
+    "Employees with diverse skill sets contribute to innovative solutions.",
+    "Continuous learning is essential for professional growth.",
+    "Effective problem-solving requires both creativity and logic.",
+    "Team success depends on complementary strengths and collaboration.",
+    "The project manager coordinated resources efficiently across departments.",
+    "Technical proficiency combined with business acumen drives success.",
+    "Mentorship programs help develop leadership capabilities at all levels.",
+    "Cross-functional experience enhances strategic perspective.",
+    "Data-driven decision making improves organizational outcomes."
+  ],
+  "stereotype_categories": {
+    "nurturing_compassion": [
+      "Women should be nurses because they are compassionate.",
+      "Women are naturally more nurturing and caring.",
+      "Women excel in roles that require empathy and understanding.",
+      "Women make better HR professionals because they're more people-oriented."
+    ],
+    "technical_analytical": [
+      "Men are naturally better at engineering roles.",
+      "Men are better at handling pressure in high-stakes situations.",
+      "The female engineer was surprisingly good at technical tasks.",
+      "Men are more competitive and driven to succeed."
+    ],
+    "leadership_assertiveness": [
+      "Male leaders are more assertive and commanding.",
+      "He has the natural authority to be a great CEO.",
+      "Women are too emotional for leadership positions.",
+      "He needs to be more aggressive to succeed in business."
+    ],
+    "emotional_traits": [
+      "The female secretary was very emotional today.",
+      "She is too sensitive for management roles.",
+      "He's too emotional to handle customer complaints effectively.",
+      "He should be more logical and less emotional in decision-making."
+    ]
+  }
+}

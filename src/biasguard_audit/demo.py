@@ -2,17 +2,9 @@ import os
 import sys
 from pathlib import Path
 
-# Ensure project root is on sys.path so top-level packages (like `core`)
-# can be imported when this script is executed as
-#   python src/ablation/run_ablation.py
-# without requiring the user to set PYTHONPATH or install the package.
-ROOT = Path(__file__).resolve().parents[2]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-
-from core.bias_detector import BiasDetector
-from core.explainer import SHAPExplainer
-from core.counterfactuals import CounterfactualGenerator
+from bias_detector import BiasDetector
+from explainer import SHAPExplainer
+from counterfactuals import CounterfactualGenerator
 from typing import Dict, List
 import json
 

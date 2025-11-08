@@ -3,7 +3,7 @@
 This module loads the raw CSVs from `data/raw`, detects the appropriate
 text/label columns, performs a held-out split on the BiasBios dataset, and
 creates a combined train/validation pool with the synthetic data. The held-
-out BiasBios test split is saved to `data/processed/biasbios_heldout_test.csv`.
+out BiasBios test split is saved to `data/processed/biasbios_test.csv`.
 
 The code is organized as small functions with clear docstrings so it is
 easy to reuse and read in a research context.
@@ -267,7 +267,7 @@ def save_heldout(
     """
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    out_path = output_dir / "biasbios_heldout_test.csv"
+    out_path = output_dir / "biasbios_test.csv"
     biasbios_test_df.to_csv(out_path, index=False)
     return out_path
 
@@ -312,8 +312,8 @@ def main() -> None:
     processed_dir = Path("data/processed")
     processed_dir.mkdir(parents=True, exist_ok=True)
 
-    train_path = processed_dir / "train_preprocessed.csv"
-    val_path = processed_dir / "val_preprocessed.csv"
+    train_path = processed_dir / "biasbios_train.csv"
+    val_path = processed_dir / "biasbios_val.csv"
 
     # Save only the canonical columns used downstream to ensure no nulls
     # appear due to source-specific metadata.

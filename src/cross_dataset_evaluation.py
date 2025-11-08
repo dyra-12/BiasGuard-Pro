@@ -329,7 +329,7 @@ def main():
     parser = argparse.ArgumentParser(description='Cross-Dataset Evaluation for Bias Detection')
     # sensible defaults for local repo layout; users can override as needed
     default_model = os.path.join('models')
-    default_biasbios = os.path.join('data', 'processed', 'biasbios_heldout_test.csv')
+    default_biasbios = os.path.join('data', 'processed', 'biasbios_test.csv')
     default_stereoset = os.path.join('data', 'raw', 'stereoset_gender.csv')
 
     parser.add_argument('--model_path', type=str, required=False, default=default_model,

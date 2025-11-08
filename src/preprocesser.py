@@ -87,13 +87,13 @@ def _load_processed_dfs(
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Load the processed train/val/test CSVs written by `data_loader.py`.
 
-    Expects files: train_preprocessed.csv, val_preprocessed.csv,
-    biasbios_heldout_test.csv. Raises FileNotFoundError if missing.
+    Expects files: biasbios_train.csv, biasbios_val.csv,
+    biasbios_test.csv. Raises FileNotFoundError if missing.
     """
 
-    train_path = processed_dir / "train_preprocessed.csv"
-    val_path = processed_dir / "val_preprocessed.csv"
-    test_path = processed_dir / "biasbios_heldout_test.csv"
+    train_path = processed_dir / "biasbios_train.csv"
+    val_path = processed_dir / "biasbios_val.csv"
+    test_path = processed_dir / "biasbios_test.csv"
 
     if not train_path.exists():
         raise FileNotFoundError(f"Missing {train_path}. Run data_loader first.")

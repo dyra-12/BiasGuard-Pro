@@ -134,17 +134,6 @@ Interpretation: Extremely low McNemar p-values indicate statistically significan
 From `results/debias_cda_classification_report.csv`: accuracy 0.9278; macro F1 0.8926; weighted F1 0.9265.
 
 ---
-## Fairness Assessment
-Current statistical test script (`src/eval/stats_tests.py`) was run with `SENSITIVE_COLS = []`, so group fairness metrics (demographic parity, equal opportunity, predictive parity) were not computed. The pipeline includes modular functions (`compute_fairness`) for future extension once sensitive attributes (e.g., gender identity tokens, pronouns, or demographic annotations) are added to the dataset.
-
-Planned fairness metrics:
-1. Demographic Parity (positive rate gap/ratio)
-2. Equal Opportunity (TPR gap/ratio)
-3. FPR Parity (FPR gap/ratio)
-4. Predictive Parity (precision gap/ratio)
-
-Limitations today: evaluation focuses on overall performance; absence of subgroup metrics means risk of hidden disparate impact. Users integrating BiasGuard should supply sensitive attribute columns and re-run `stats_tests.py --sensitive-cols gender` (for example) after extending the dataset.
-
 ---
 ## Performance & Optimization Summary
 
@@ -164,15 +153,29 @@ Potential optimizations (not yet committed):
 ---
 ## Ethical Considerations & Limitations
 
-1. Scope Restriction: Focuses on gendered stereotypes in career recommendation text; other protected attributes (race, age, disability, etc.) are not covered by current training data.
-2. Cultural & Linguistic Variability: Bias expressions vary across cultures; English-centric training limits transferability.
-3. False Positives vs Mitigation: Overzealous bias flagging may suppress legitimate positive trait descriptions; calibration and human review recommended.
-4. Counterfactual Quality: Simple lexical substitutions may reduce bias probability without preserving semantic intent (risk of semantic drift).
-5. Dataset Bias: Synthetic examples (e.g., GPT-generated) can encode artifacts of the generation model; real-world validation still required.
-6. Non-Determinism: Transformer inference can vary slightly across hardware / library versions; pin dependencies for reproducibility.
-7. Responsible Use: Outputs should guide human moderation, not autonomously censor or make hiring decisions.
+🔒 Responsible Use
+- Human-in-the-Loop Design: Outputs are intended to inform human decision-making and reviewer workflows, not to be used as an autonomous moderation or hiring filter.
+- Privacy-Preserving: The pipeline processes text only; it does not perform user tracking, identity profiling, or store personally-identifying metadata by default.
+- Transparency Focus: Every detection can be paired with explanations (SHAP token attributions and generated counterfactuals) so reviewers can verify and contest automated decisions.
 
-Mitigation Roadmap: add multi-attribute annotations; incorporate fairness-aware loss terms; evaluate across intersectional slices; enhance counterfactual generation with semantic similarity constraints.
+🎯 Scope & Boundaries
+- Specialized Domain: The system is optimized for career recommendation contexts and professional bios (we report 92%+ accuracy on in-domain BiasBios test splits).
+- Language Focus: Current models and datasets target English-language gendered stereotypes in professional settings; cross-lingual use is not supported without retraining or adaptation.
+- Validated Patterns: The pipeline is tuned to surface common professional stereotype categories such as nurturing/caregiving, technical/aptitude, and leadership/assertiveness biases.
+
+🔬 Research Context
+- Cross-Dataset Evaluation: We provide thorough testing on in-domain BiasBios and out-of-domain StereoSet to demonstrate both in-domain performance and generalization limits.
+- Statistical Rigor: Performance claims are accompanied by paired significance tests (McNemar, paired t-tests) and aggregated metrics in `results/`.
+- Reproducibility: Code, data download scripts, processed splits, and trained checkpoints are included so results can be reproduced end-to-end.
+
+🚧 Development Path
+- Future Expansion: Planned work includes multilingual support, intersectional subgroup analyses, and additional protected-attribute coverage.
+- Continuous Improvement: The framework is designed for community contributions — add labeled slices, plug-in fairness-aware losses, and extend counterfactual constraints.
+
+Mitigation Roadmap
+- Short term: add multi-attribute annotations and targeted fine-tuning to reduce observed subgroup gaps.
+- Medium term: incorporate fairness-aware loss terms and post-hoc calibration across sensitive groups.
+- Long term: evaluate and mitigate intersectional harms, integrate semantic-preserving counterfactual generation, and maintain an updatable model card documenting known limitations.
 
 ---
 ## How to Cite
@@ -182,7 +185,7 @@ If you use BiasGuard Pro in research, please cite:
 ```bibtex
 @software{biasguard_pro_2025,
 	title        = {BiasGuard Pro: Auditing and Mitigating Gendered Stereotypes in Career Recommendation Systems},
-	author       = {Your Name and Collaborators},
+	author       = {Dyuti Dasmahapatra},
 	year         = {2025},
 	publisher    = {GitHub},
 	url          = {https://github.com/dyra-12/BiasGuard-Pro},

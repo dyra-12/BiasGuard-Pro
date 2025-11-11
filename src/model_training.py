@@ -37,6 +37,17 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class TrainingConfig:
+    """Configuration container for training runs.
+
+    This dataclass holds commonly-tuned hyperparameters and output
+    configuration such as the base model name, number of labels, learning
+    rate, regularization, batch size, number of epochs and device.
+
+    Fields are intentionally simple so the object can be serialized to
+    JSON for experiment management or used directly when invoking
+    ``train_model``.
+    """
+
     model_name: str = "distilbert-base-uncased"
     num_labels: int = 2
     learning_rate: float = 2e-5
@@ -153,15 +164,29 @@ def train_model(
         pbar = tqdm(train_loader, desc="Training", leave=False)
         for batch in pbar:
             optimizer.zero_grad()
+            # Move tensors to device (GPU if available). The loader keys
+            # are expected to include input_ids, attention_mask and possibly
+            # token_type_ids depending on the model/tokenizer.
             inputs = {k: v.to(device) for k, v in batch.items() if k != "labels"}
             labels = batch["labels"].to(device)
+
+            # Forward pass
             outputs = model(**inputs)
             logits = outputs.logits
+
+            # Compute loss with class weights to address class imbalance.
+            # The criterion expects raw logits and integer labels.
             loss = criterion(logits, labels)
+
+            # Standard backward/optimizer step
             loss.backward()
             optimizer.step()
+
+            # Step the learning-rate scheduler after optimizer to update
+            # the learning rate according to the chosen schedule.
             scheduler.step()
 
+            # Collect running stats for progress display
             preds = torch.argmax(logits, dim=-1)
             running_loss += loss.item() * labels.size(0)
             running_corrects += (preds == labels).sum().item()

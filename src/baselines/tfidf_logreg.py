@@ -20,23 +20,23 @@ The script is written to be robust to minor column-name differences in
 the processed CSVs (it will try to autodetect label/text columns).
 """
 
-from pathlib import Path
+import argparse
 import json
 import logging
-import argparse
+from pathlib import Path
 
+import joblib
 import numpy as np
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
-    classification_report,
     accuracy_score,
+    classification_report,
+    f1_score,
     precision_score,
     recall_score,
-    f1_score,
 )
-import joblib
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -47,7 +47,9 @@ DEFAULT_RESULTS_DIR = Path("results")
 SEED = 42
 
 # Module logger
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 
@@ -88,11 +90,18 @@ def prepare_xy(df: pd.DataFrame, role: str = "train"):
     label_col = _detect_column(df, label_candidates)
 
     if text_col is None:
-        raise ValueError(f"Could not detect a text column in {role} DataFrame. Columns: {list(df.columns)}")
+        raise ValueError(
+            f"Could not detect a text column in {role} DataFrame. Columns: {list(df.columns)}"
+        )
     if label_col is None:
         # It's possible the test set keeps a different label name; if fully missing, raise
-        logger.warning("No label column found in %s set; classification/training requires labels.", role)
-        raise ValueError(f"Could not detect a label column in {role} DataFrame. Columns: {list(df.columns)}")
+        logger.warning(
+            "No label column found in %s set; classification/training requires labels.",
+            role,
+        )
+        raise ValueError(
+            f"Could not detect a label column in {role} DataFrame. Columns: {list(df.columns)}"
+        )
 
     X = df[text_col].astype(str).tolist()
     y = pd.to_numeric(df[label_col], errors="coerce").fillna(0).astype(int).tolist()
@@ -103,9 +112,15 @@ def prepare_xy(df: pd.DataFrame, role: str = "train"):
 def compute_metrics(y_true, y_pred):
     return {
         "accuracy": float(accuracy_score(y_true, y_pred)),
-        "precision_weighted": float(precision_score(y_true, y_pred, average="weighted", zero_division=0)),
-        "recall_weighted": float(recall_score(y_true, y_pred, average="weighted", zero_division=0)),
-        "f1_weighted": float(f1_score(y_true, y_pred, average="weighted", zero_division=0)),
+        "precision_weighted": float(
+            precision_score(y_true, y_pred, average="weighted", zero_division=0)
+        ),
+        "recall_weighted": float(
+            recall_score(y_true, y_pred, average="weighted", zero_division=0)
+        ),
+        "f1_weighted": float(
+            f1_score(y_true, y_pred, average="weighted", zero_division=0)
+        ),
     }
 
 
@@ -150,12 +165,17 @@ def main(
     model_name = "tfidf_logreg"
 
     logger.info("Fitting TF-IDF vectorizer")
-    tfidf = TfidfVectorizer(max_features=10000, ngram_range=(1, 2), stop_words="english", min_df=2)
+    tfidf = TfidfVectorizer(
+        max_features=10000, ngram_range=(1, 2), stop_words="english", min_df=2
+    )
     X_train_tfidf = tfidf.fit_transform(X_train)
     X_val_tfidf = tfidf.transform(X_val)
     X_test_tfidf = tfidf.transform(X_test)
 
     logger.info("Training Logistic Regression")
+    # Use class_weight='balanced' to automatically adjust for label
+    # imbalance. LogisticRegression accepts sparse matrix inputs from
+    # TfidfVectorizer which keeps memory usage efficient.
     clf = LogisticRegression(random_state=seed, max_iter=1000, class_weight="balanced")
     clf.fit(X_train_tfidf, y_train)
 
@@ -167,15 +187,40 @@ def main(
     logger.info("Saved vectorizer -> %s", vec_out)
     logger.info("Saved model      -> %s", mdl_out)
 
+    # Optionally one could evaluate on val/test here and write predictions
+    # and metrics to `results_dir` (similar to other baseline scripts).
+
     logger.info("Done.")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Train a TF-IDF + LogisticRegression baseline on BiasBios processed data")
-    parser.add_argument("--processed_dir", type=Path, default=DEFAULT_PROCESSED_DIR, help="Path to processed CSVs")
-    parser.add_argument("--models_dir", type=Path, default=DEFAULT_MODELS_DIR, help="Directory to save models")
-    parser.add_argument("--results_dir", type=Path, default=DEFAULT_RESULTS_DIR, help="Directory to save results")
+    parser = argparse.ArgumentParser(
+        description="Train a TF-IDF + LogisticRegression baseline on BiasBios processed data"
+    )
+    parser.add_argument(
+        "--processed_dir",
+        type=Path,
+        default=DEFAULT_PROCESSED_DIR,
+        help="Path to processed CSVs",
+    )
+    parser.add_argument(
+        "--models_dir",
+        type=Path,
+        default=DEFAULT_MODELS_DIR,
+        help="Directory to save models",
+    )
+    parser.add_argument(
+        "--results_dir",
+        type=Path,
+        default=DEFAULT_RESULTS_DIR,
+        help="Directory to save results",
+    )
     parser.add_argument("--seed", type=int, default=SEED, help="Random seed")
     args = parser.parse_args()
 
-    main(processed_dir=args.processed_dir, models_dir=args.models_dir, results_dir=args.results_dir, seed=args.seed)
+    main(
+        processed_dir=args.processed_dir,
+        models_dir=args.models_dir,
+        results_dir=args.results_dir,
+        seed=args.seed,
+    )

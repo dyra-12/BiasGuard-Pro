@@ -3,165 +3,250 @@ Cross-Dataset Evaluation Script
 Evaluates models on BiasBios and StereoSet datasets for binary classification
 """
 
-import torch
-import pandas as pd
-import numpy as np
+import argparse
 import json
 import os
-from typing import Dict, List, Optional, Tuple, Any
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
-from sklearn.metrics import classification_report, accuracy_score, f1_score
+import numpy as np
+import pandas as pd
+import torch
+from sklearn.metrics import accuracy_score, classification_report, f1_score
 from torch.utils.data import DataLoader, Dataset
-import argparse
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 
 class TextClassificationDataset(Dataset):
-    """Custom Dataset for text classification tasks"""
-    
-    def __init__(self, texts: List[str], labels: List[int], tokenizer, max_length: int = 128):
+    """Custom Dataset for text classification tasks.
+
+    This lightweight wrapper holds lists of texts and integer labels and
+    exposes a ``collate_fn`` compatible with HuggingFace tokenizers so the
+    returned batch can be directly passed to a model. The dataset yields
+    raw tensors for ``input_ids`` and ``attention_mask`` along with a
+    long tensor for the label under the key ``labels``.
+
+    Args:
+        texts: List of raw input strings.
+        labels: List of integer class labels (0/1 for binary setups).
+        tokenizer: A HuggingFace tokenizer instance providing a ``__call__``
+            method that returns torch tensors when ``return_tensors='pt'``.
+        max_length: Maximum token length for padding/truncation.
+    """
+
+    def __init__(
+        self, texts: List[str], labels: List[int], tokenizer, max_length: int = 128
+    ):
         self.texts = texts
         self.labels = labels
         self.tokenizer = tokenizer
         self.max_length = max_length
-    
+
     def __len__(self) -> int:
         return len(self.texts)
-    
+
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
         text = str(self.texts[idx])
         label = self.labels[idx]
-        
+
         encoding = self.tokenizer(
             text,
             truncation=True,
-            padding='max_length',
+            padding="max_length",
             max_length=self.max_length,
-            return_tensors='pt'
+            return_tensors="pt",
         )
-        
+
         return {
-            'input_ids': encoding['input_ids'].flatten(),
-            'attention_mask': encoding['attention_mask'].flatten(),
-            'labels': torch.tensor(label, dtype=torch.long)
+            "input_ids": encoding["input_ids"].flatten(),
+            "attention_mask": encoding["attention_mask"].flatten(),
+            "labels": torch.tensor(label, dtype=torch.long),
         }
 
 
 class CrossDatasetEvaluator:
-    """Main class for cross-dataset evaluation"""
-    
+    """Run cross-dataset evaluation of a sequence classification model.
+
+    The evaluator is responsible for loading a local HuggingFace model,
+    reading evaluation CSVs for BiasBios and StereoSet (with small
+    heuristics to locate text/label columns), running batched inference,
+    computing common metrics, and persisting predictions and a comparison
+    table to the ``results`` directory.
+
+    Args:
+        model_path: Local directory containing a pretrained HF model and
+            tokenizer (compatible with ``AutoModelForSequenceClassification``).
+        batch_size: Batch size used during evaluation.
+        max_length: Maximum sequence length for tokenization.
+    """
+
     def __init__(self, model_path: str, batch_size: int = 16, max_length: int = 128):
         self.model_path = model_path
         self.batch_size = batch_size
         self.max_length = max_length
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = None
         self.tokenizer = None
-        
+
         # Create results directory
         self.results_dir = Path("results")
         self.results_dir.mkdir(exist_ok=True)
-    
+
     def load_model(self) -> bool:
-        """Load model and tokenizer from local path"""
+        """Load tokenizer and sequence-classification model from disk.
+
+        Returns True on success and False on error. The method sets
+        ``self.tokenizer`` and ``self.model`` and moves the model to the
+        evaluator's configured device.
+        """
         try:
             print(f"Loading model from {self.model_path}...")
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_path)
-            self.model = AutoModelForSequenceClassification.from_pretrained(self.model_path)
+            self.model = AutoModelForSequenceClassification.from_pretrained(
+                self.model_path
+            )
             self.model = self.model.to(self.device)
             print(f"Model loaded successfully on {self.device}")
             return True
         except Exception as e:
             print(f"Error loading model: {e}")
             return False
-    
+
     def load_biasbios_data(self, file_path: str) -> Tuple[List[str], List[int]]:
-        """Load BiasBios dataset"""
+        """Load BiasBios-style CSV and return texts and integer labels.
+
+        The loader attempts a few common column names for the text and
+        label fields and raises a ValueError if none are found. Missing
+        text values are coerced to empty strings and labels are cast to
+        integers.
+
+        Args:
+            file_path: Path to the BiasBios CSV file.
+
+        Returns:
+            Tuple of (texts, labels).
+        """
         print(f"Loading BiasBios data from {file_path}...")
         df = pd.read_csv(file_path)
-        
+
         # Adjust column names based on your dataset
-        text_col = 'text'
-        label_col = 'label_binary'
-        
+        text_col = "text"
+        label_col = "label_binary"
+
         if text_col not in df.columns:
             # Try to find alternative column names
-            possible_text_cols = ['text', 'hard_text', 'sentence']
-            text_col = next((col for col in possible_text_cols if col in df.columns), None)
-        
+            possible_text_cols = ["text", "hard_text", "sentence"]
+            text_col = next(
+                (col for col in possible_text_cols if col in df.columns), None
+            )
+
         if label_col not in df.columns:
-            possible_label_cols = ['label_binary', 'bias_score', 'label']
-            label_col = next((col for col in possible_label_cols if col in df.columns), None)
-        
+            possible_label_cols = ["label_binary", "bias_score", "label"]
+            label_col = next(
+                (col for col in possible_label_cols if col in df.columns), None
+            )
+
         if text_col is None or label_col is None:
-            raise ValueError(f"Could not find appropriate columns. Available columns: {df.columns.tolist()}")
-        
-        texts = df[text_col].fillna('').astype(str).tolist()
+            raise ValueError(
+                f"Could not find appropriate columns. Available columns: {df.columns.tolist()}"
+            )
+
+        texts = df[text_col].fillna("").astype(str).tolist()
         labels = df[label_col].astype(int).tolist()
-        
+
         print(f"Loaded {len(texts)} samples from BiasBios")
         return texts, labels
-    
+
     def load_stereoset_data(self, file_path: str) -> Tuple[List[str], List[int]]:
-        """Load StereoSet dataset"""
+        """Load StereoSet-style CSV and return texts and integer labels.
+
+        Behavior mirrors ``load_biasbios_data`` with different heuristics
+        for common column names specific to StereoSet exports.
+        """
         print(f"Loading StereoSet data from {file_path}...")
         df = pd.read_csv(file_path)
-        
+
         # Adjust column names based on your dataset
-        text_col = 'text'
-        label_col = 'binary_label'
-        
+        text_col = "text"
+        label_col = "binary_label"
+
         if text_col not in df.columns:
-            possible_text_cols = ['text', 'sentence', 'context']
-            text_col = next((col for col in possible_text_cols if col in df.columns), None)
-        
+            possible_text_cols = ["text", "sentence", "context"]
+            text_col = next(
+                (col for col in possible_text_cols if col in df.columns), None
+            )
+
         if label_col not in df.columns:
-            possible_label_cols = ['binary_label', 'gold_label', 'label']
-            label_col = next((col for col in possible_label_cols if col in df.columns), None)
-        
+            possible_label_cols = ["binary_label", "gold_label", "label"]
+            label_col = next(
+                (col for col in possible_label_cols if col in df.columns), None
+            )
+
         if text_col is None or label_col is None:
-            raise ValueError(f"Could not find appropriate columns. Available columns: {df.columns.tolist()}")
-        
-        texts = df[text_col].fillna('').astype(str).tolist()
+            raise ValueError(
+                f"Could not find appropriate columns. Available columns: {df.columns.tolist()}"
+            )
+
+        texts = df[text_col].fillna("").astype(str).tolist()
         labels = df[label_col].astype(int).tolist()
-        
+
         print(f"Loaded {len(texts)} samples from StereoSet")
         return texts, labels
-    
-    def evaluate_dataset(self, texts: List[str], labels: List[int], dataset_name: str) -> Dict[str, Any]:
-        """Evaluate model on a single dataset"""
+
+    def evaluate_dataset(
+        self, texts: List[str], labels: List[int], dataset_name: str
+    ) -> Dict[str, Any]:
+        """Run batched inference and compute metrics for a single dataset.
+
+        The function builds a ``TextClassificationDataset`` and a
+        DataLoader, runs the model in evaluation mode, collects
+        predictions and true labels, and computes accuracy/f1 and a
+        classification report. Results are returned in a dict that also
+        includes the raw texts and predictions for downstream saving.
+
+        Args:
+            texts: List of input strings.
+            labels: Corresponding integer labels.
+            dataset_name: Human-readable dataset name used in logging.
+
+        Returns:
+            A dictionary containing predictions, true labels, summary
+            metrics and the full classification report (both text and
+            dict forms).
+        """
         if self.model is None or self.tokenizer is None:
             raise ValueError("Model or tokenizer not loaded. Call load_model() first.")
-        
+
         print(f"Evaluating on {dataset_name}...")
-        
+
         # Create dataset and dataloader
-        dataset = TextClassificationDataset(texts, labels, self.tokenizer, self.max_length)
+        dataset = TextClassificationDataset(
+            texts, labels, self.tokenizer, self.max_length
+        )
         dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=False)
-        
+
         self.model.eval()
         predictions = []
         true_labels = []
-        
+
         with torch.no_grad():
             for batch in dataloader:
-                input_ids = batch['input_ids'].to(self.device)
-                attention_mask = batch['attention_mask'].to(self.device)
-                labels_batch = batch['labels'].to(self.device)
-                
+                input_ids = batch["input_ids"].to(self.device)
+                attention_mask = batch["attention_mask"].to(self.device)
+                labels_batch = batch["labels"].to(self.device)
+
                 outputs = self.model(input_ids, attention_mask=attention_mask)
                 _, preds = torch.max(outputs.logits, dim=1)
-                
+
                 predictions.extend(preds.cpu().numpy())
                 true_labels.extend(labels_batch.cpu().numpy())
-        
+
         # Calculate metrics
         accuracy = accuracy_score(true_labels, predictions)
-        f1 = f1_score(true_labels, predictions, average='binary')
+        f1 = f1_score(true_labels, predictions, average="binary")
         report = classification_report(true_labels, predictions, output_dict=False)
         report_dict = classification_report(true_labels, predictions, output_dict=True)
-        
+
         print(f"\n{'='*50}")
         print(f"Results for {dataset_name}")
         print(f"{'='*50}")
@@ -169,59 +254,73 @@ class CrossDatasetEvaluator:
         print(f"F1 Score: {f1:.4f}")
         print(f"\nClassification Report:")
         print(report)
-        
+
         return {
-            'predictions': predictions,
-            'true_labels': true_labels,
-            'texts': texts,
-            'accuracy': accuracy,
-            'f1_score': f1,
-            'classification_report': report,
-            'classification_report_dict': report_dict
+            "predictions": predictions,
+            "true_labels": true_labels,
+            "texts": texts,
+            "accuracy": accuracy,
+            "f1_score": f1,
+            "classification_report": report,
+            "classification_report_dict": report_dict,
         }
-    
+
     def save_results(self, results: Dict[str, Any], dataset_name: str):
-        """Save predictions and metrics to files"""
+        """Persist predictions CSV and a JSON metrics file for `results`.
+
+        The CSV contains columns: text, true_label, predicted_label. The
+        metrics JSON contains dataset-level metrics and the classification
+        report dict. Filenames are written to the evaluator's ``results``
+        directory.
+        """
         if results is None:
             return
-        
+
         # Sanitize dataset name for filename
         safe_name = dataset_name.replace(" ", "_").lower()
-        
+
         # Save predictions
-        results_df = pd.DataFrame({
-            'text': results['texts'],
-            'true_label': results['true_labels'],
-            'predicted_label': results['predictions']
-        })
-        
+        results_df = pd.DataFrame(
+            {
+                "text": results["texts"],
+                "true_label": results["true_labels"],
+                "predicted_label": results["predictions"],
+            }
+        )
+
         predictions_filename = self.results_dir / f"{safe_name}_predictions.csv"
         results_df.to_csv(predictions_filename, index=False)
-        
+
         # Save metrics
         metrics = {
-            'dataset': dataset_name,
-            'accuracy': results['accuracy'],
-            'f1_score': results['f1_score'],
-            'classification_report': results['classification_report_dict']
+            "dataset": dataset_name,
+            "accuracy": results["accuracy"],
+            "f1_score": results["f1_score"],
+            "classification_report": results["classification_report_dict"],
         }
-        
+
         metrics_filename = self.results_dir / f"{safe_name}_metrics.json"
-        with open(metrics_filename, 'w') as f:
+        with open(metrics_filename, "w") as f:
             json.dump(metrics, f, indent=2)
-        
+
         print(f"Saved predictions to: {predictions_filename}")
         print(f"Saved metrics to: {metrics_filename}")
-    
+
     def run_evaluation(self, biasbios_path: str, stereoset_path: str):
-        """Run full cross-dataset evaluation"""
+        """High-level orchestration: load model, load datasets, run
+        per-dataset evaluation, save results and print a summary.
+
+        Args:
+            biasbios_path: Path to the BiasBios test CSV.
+            stereoset_path: Path to the StereoSet CSV.
+        """
         print("Starting Cross-Dataset Evaluation...")
         print(f"Using device: {self.device}")
-        
+
         # Load model
         if not self.load_model():
             return
-        
+
         # Load datasets
         try:
             biasbios_texts, biasbios_labels = self.load_biasbios_data(biasbios_path)
@@ -229,14 +328,18 @@ class CrossDatasetEvaluator:
         except Exception as e:
             print(f"Error loading datasets: {e}")
             return
-        
+
         # Evaluate on both datasets
-        biasbios_results = self.evaluate_dataset(biasbios_texts, biasbios_labels, "BiasBios Test")
-        stereoset_results = self.evaluate_dataset(stereoset_texts, stereoset_labels, "StereoSet Gender")
+        biasbios_results = self.evaluate_dataset(
+            biasbios_texts, biasbios_labels, "BiasBios Test"
+        )
+        stereoset_results = self.evaluate_dataset(
+            stereoset_texts, stereoset_labels, "StereoSet Gender"
+        )
 
         # ensure dataset name is recorded inside results for comparison table
-        biasbios_results['dataset'] = "BiasBios Test"
-        stereoset_results['dataset'] = "StereoSet Gender"
+        biasbios_results["dataset"] = "BiasBios Test"
+        stereoset_results["dataset"] = "StereoSet Gender"
 
         # Save results
         self.save_results(biasbios_results, "biasbios_test")
@@ -245,7 +348,9 @@ class CrossDatasetEvaluator:
         # Save combined comparison table
         try:
             self.save_comparison_table([biasbios_results, stereoset_results])
-            print(f"Saved cross-dataset comparison to: {self.results_dir / 'crossdataset_results.csv'}")
+            print(
+                f"Saved cross-dataset comparison to: {self.results_dir / 'crossdataset_results.csv'}"
+            )
         except Exception as e:
             print(f"Failed to save cross-dataset comparison table: {e}")
 
@@ -254,40 +359,54 @@ class CrossDatasetEvaluator:
 
     def _row_from_report(self, results: Dict[str, Any]) -> Dict[str, Any]:
         """Convert a single evaluation's results into a flat row for the comparison table."""
-        report_dict = results.get('classification_report_dict', {})
+        report_dict = results.get("classification_report_dict", {})
         # Class labels might be strings like '0' and '1'
-        cls0 = report_dict.get('0', {})
-        cls1 = report_dict.get('1', {})
-        macro = report_dict.get('macro avg', {}) or report_dict.get('macro_avg', {})
-        weighted = report_dict.get('weighted avg', {}) or report_dict.get('weighted_avg', {})
+        cls0 = report_dict.get("0", {})
+        cls1 = report_dict.get("1", {})
+        macro = report_dict.get("macro avg", {}) or report_dict.get("macro_avg", {})
+        weighted = report_dict.get("weighted avg", {}) or report_dict.get(
+            "weighted_avg", {}
+        )
 
-        support_0 = int(cls0.get('support', 0)) if cls0 else 0
-        support_1 = int(cls1.get('support', 0)) if cls1 else 0
+        support_0 = int(cls0.get("support", 0)) if cls0 else 0
+        support_1 = int(cls1.get("support", 0)) if cls1 else 0
 
         row = {
-            'dataset': results.get('dataset', ''),
-            'accuracy': float(results.get('accuracy', np.nan)),
-            'f1_score': float(results.get('f1_score', np.nan)),
-            'precision_0': float(cls0.get('precision', np.nan)) if cls0 else np.nan,
-            'recall_0': float(cls0.get('recall', np.nan)) if cls0 else np.nan,
-            'f1_0': float(cls0.get('f1-score', np.nan)) if cls0 else np.nan,
-            'support_0': support_0,
-            'precision_1': float(cls1.get('precision', np.nan)) if cls1 else np.nan,
-            'recall_1': float(cls1.get('recall', np.nan)) if cls1 else np.nan,
-            'f1_1': float(cls1.get('f1-score', np.nan)) if cls1 else np.nan,
-            'support_1': support_1,
-            'macro_precision': float(macro.get('precision', np.nan)) if macro else np.nan,
-            'macro_recall': float(macro.get('recall', np.nan)) if macro else np.nan,
-            'macro_f1': float(macro.get('f1-score', np.nan)) if macro else np.nan,
-            'weighted_precision': float(weighted.get('precision', np.nan)) if weighted else np.nan,
-            'weighted_recall': float(weighted.get('recall', np.nan)) if weighted else np.nan,
-            'weighted_f1': float(weighted.get('f1-score', np.nan)) if weighted else np.nan,
-            'total_support': support_0 + support_1
+            "dataset": results.get("dataset", ""),
+            "accuracy": float(results.get("accuracy", np.nan)),
+            "f1_score": float(results.get("f1_score", np.nan)),
+            "precision_0": float(cls0.get("precision", np.nan)) if cls0 else np.nan,
+            "recall_0": float(cls0.get("recall", np.nan)) if cls0 else np.nan,
+            "f1_0": float(cls0.get("f1-score", np.nan)) if cls0 else np.nan,
+            "support_0": support_0,
+            "precision_1": float(cls1.get("precision", np.nan)) if cls1 else np.nan,
+            "recall_1": float(cls1.get("recall", np.nan)) if cls1 else np.nan,
+            "f1_1": float(cls1.get("f1-score", np.nan)) if cls1 else np.nan,
+            "support_1": support_1,
+            "macro_precision": (
+                float(macro.get("precision", np.nan)) if macro else np.nan
+            ),
+            "macro_recall": float(macro.get("recall", np.nan)) if macro else np.nan,
+            "macro_f1": float(macro.get("f1-score", np.nan)) if macro else np.nan,
+            "weighted_precision": (
+                float(weighted.get("precision", np.nan)) if weighted else np.nan
+            ),
+            "weighted_recall": (
+                float(weighted.get("recall", np.nan)) if weighted else np.nan
+            ),
+            "weighted_f1": (
+                float(weighted.get("f1-score", np.nan)) if weighted else np.nan
+            ),
+            "total_support": support_0 + support_1,
         }
 
         return row
 
-    def save_comparison_table(self, results_list: List[Dict[str, Any]], filename: str = 'crossdataset_results.csv'):
+    def save_comparison_table(
+        self,
+        results_list: List[Dict[str, Any]],
+        filename: str = "crossdataset_results.csv",
+    ):
         """Build a comparison table from multiple evaluation results and save as CSV.
 
         The function expects each results dict to contain 'classification_report_dict',
@@ -296,64 +415,91 @@ class CrossDatasetEvaluator:
         rows = []
         for r in results_list:
             # Ensure we have a dataset label for clarity
-            if 'dataset' not in r or not r.get('dataset'):
+            if "dataset" not in r or not r.get("dataset"):
                 # Attempt to infer from saved metrics JSON if present
-                r['dataset'] = r.get('classification_report_dict', {}).get('dataset', '')
+                r["dataset"] = r.get("classification_report_dict", {}).get(
+                    "dataset", ""
+                )
             rows.append(self._row_from_report(r))
 
         df = pd.DataFrame(rows)
         out_path = self.results_dir / filename
         df.to_csv(out_path, index=False)
-    
-    def print_summary(self, biasbios_results: Dict[str, Any], stereoset_results: Dict[str, Any]):
-        """Print evaluation summary"""
-        print("\n" + "="*60)
+
+    def print_summary(
+        self, biasbios_results: Dict[str, Any], stereoset_results: Dict[str, Any]
+    ):
+        """Print a short human-readable summary of the two dataset runs.
+
+        This prints accuracy and F1 for each dataset when available.
+        """
+        print("\n" + "=" * 60)
         print("CROSS-DATASET EVALUATION SUMMARY")
-        print("="*60)
-        
+        print("=" * 60)
+
         if biasbios_results is not None:
             print(f"\nBiasBios Test Results:")
             print(f"  Accuracy: {biasbios_results['accuracy']:.4f}")
             print(f"  F1 Score: {biasbios_results['f1_score']:.4f}")
-        
+
         if stereoset_results is not None:
             print(f"\nStereoSet Gender Results:")
             print(f"  Accuracy: {stereoset_results['accuracy']:.4f}")
             print(f"  F1 Score: {stereoset_results['f1_score']:.4f}")
-        
-        print("\n" + "="*60)
+
+        print("\n" + "=" * 60)
 
 
 def main():
     """Main function to run evaluation from command line"""
-    parser = argparse.ArgumentParser(description='Cross-Dataset Evaluation for Bias Detection')
+    parser = argparse.ArgumentParser(
+        description="Cross-Dataset Evaluation for Bias Detection"
+    )
     # sensible defaults for local repo layout; users can override as needed
-    default_model = os.path.join('models')
-    default_biasbios = os.path.join('data', 'processed', 'biasbios_test.csv')
-    default_stereoset = os.path.join('data', 'raw', 'stereoset_gender.csv')
+    default_model = os.path.join("models")
+    default_biasbios = os.path.join("data", "processed", "biasbios_test.csv")
+    default_stereoset = os.path.join("data", "raw", "stereoset_gender.csv")
 
-    parser.add_argument('--model_path', type=str, required=False, default=default_model,
-                        help=f'Path to the model directory (default: {default_model})')
-    parser.add_argument('--biasbios_path', type=str, required=False, default=default_biasbios,
-                        help=f'Path to BiasBios test CSV (default: {default_biasbios})')
-    parser.add_argument('--stereoset_path', type=str, required=False, default=default_stereoset,
-                        help=f'Path to StereoSet CSV (default: {default_stereoset})')
-    parser.add_argument('--batch_size', type=int, default=16, help='Batch size for evaluation')
-    parser.add_argument('--max_length', type=int, default=128, help='Maximum sequence length')
-    
+    parser.add_argument(
+        "--model_path",
+        type=str,
+        required=False,
+        default=default_model,
+        help=f"Path to the model directory (default: {default_model})",
+    )
+    parser.add_argument(
+        "--biasbios_path",
+        type=str,
+        required=False,
+        default=default_biasbios,
+        help=f"Path to BiasBios test CSV (default: {default_biasbios})",
+    )
+    parser.add_argument(
+        "--stereoset_path",
+        type=str,
+        required=False,
+        default=default_stereoset,
+        help=f"Path to StereoSet CSV (default: {default_stereoset})",
+    )
+    parser.add_argument(
+        "--batch_size", type=int, default=16, help="Batch size for evaluation"
+    )
+    parser.add_argument(
+        "--max_length", type=int, default=128, help="Maximum sequence length"
+    )
+
     args = parser.parse_args()
-    
+
     # Initialize evaluator
     evaluator = CrossDatasetEvaluator(
         model_path=args.model_path,
         batch_size=args.batch_size,
-        max_length=args.max_length
+        max_length=args.max_length,
     )
-    
+
     # Run evaluation
     evaluator.run_evaluation(
-        biasbios_path=args.biasbios_path,
-        stereoset_path=args.stereoset_path
+        biasbios_path=args.biasbios_path, stereoset_path=args.stereoset_path
     )
 
 

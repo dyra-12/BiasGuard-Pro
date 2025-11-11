@@ -11,35 +11,36 @@ Kaggle-specific paths and adds a simple CLI.
 """
 
 import os
+
 os.environ["WANDB_DISABLED"] = "true"
 
-import sys
-import time
+import argparse
 import json
 import logging
-import argparse
+import sys
+import time
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import seaborn as sns
 import torch
 from datasets import Dataset
-from transformers import (
-    AutoTokenizer,
-    AutoModelForSequenceClassification,
-    Trainer,
-    TrainingArguments,
-    TrainerCallback,
-)
 from sklearn.metrics import (
-    precision_recall_fscore_support,
     accuracy_score,
     classification_report,
     confusion_matrix,
+    precision_recall_fscore_support,
 )
-import seaborn as sns
-import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
+from transformers import (
+    AutoModelForSequenceClassification,
+    AutoTokenizer,
+    Trainer,
+    TrainerCallback,
+    TrainingArguments,
+)
 
 # Default configuration
 MODEL_ID = "roberta-base"
@@ -54,21 +55,40 @@ BATCH_SIZE = 8
 GRAD_ACCUM = 2
 FP16 = True
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 
 def _detect_column(df: pd.DataFrame, candidates):
+    """Return the first column name from `candidates` that exists in `df`.
+
+    Args:
+        df: DataFrame to inspect.
+        candidates: Iterable of candidate column names.
+
+    Returns:
+        Column name string or None if no candidate present.
+    """
+
     return next((c for c in candidates if c in df.columns), None)
 
 
 def load_processed_datasets(processed_dir: Path):
+    """Load processed train/val/test CSVs from `processed_dir`.
+
+    Raises FileNotFoundError if any expected file is missing.
+    """
+
     train_path = processed_dir / "biasbios_train.csv"
     val_path = processed_dir / "biasbios_val.csv"
     test_path = processed_dir / "biasbios_test.csv"
 
     if not train_path.exists() or not val_path.exists() or not test_path.exists():
-        raise FileNotFoundError(f"Expected processed files in {processed_dir}: biasbios_train/val/test.csv")
+        raise FileNotFoundError(
+            f"Expected processed files in {processed_dir}: biasbios_train/val/test.csv"
+        )
 
     train_df = pd.read_csv(train_path)
     val_df = pd.read_csv(val_path)
@@ -77,6 +97,11 @@ def load_processed_datasets(processed_dir: Path):
 
 
 def prepare_xy(df: pd.DataFrame, role: str = "train"):
+    """Detect text and label columns and return lists (X, y).
+
+    `role` is used only for clearer error messages to the caller.
+    """
+
     text_candidates = ["text", "cleaned_text", "hard_text", "context", "sentence"]
     label_candidates = ["label", "label_binary", "bias_label", "binary_label"]
 
@@ -84,10 +109,16 @@ def prepare_xy(df: pd.DataFrame, role: str = "train"):
     label_col = _detect_column(df, label_candidates)
 
     if text_col is None:
-        raise ValueError(f"Could not detect a text column in {role} DataFrame. Columns: {list(df.columns)}")
+        raise ValueError(
+            f"Could not detect a text column in {role} DataFrame. Columns: {list(df.columns)}"
+        )
     if label_col is None:
-        logger.warning("No label column found in %s set; classification requires labels.", role)
-        raise ValueError(f"Could not detect a label column in {role} DataFrame. Columns: {list(df.columns)}")
+        logger.warning(
+            "No label column found in %s set; classification requires labels.", role
+        )
+        raise ValueError(
+            f"Could not detect a label column in {role} DataFrame. Columns: {list(df.columns)}"
+        )
 
     X = df[text_col].astype(str).tolist()
     y = pd.to_numeric(df[label_col], errors="coerce").fillna(0).astype(int).tolist()
@@ -95,9 +126,17 @@ def prepare_xy(df: pd.DataFrame, role: str = "train"):
 
 
 def compute_metrics(eval_pred):
+    """Compute evaluation metrics for the Trainer.
+
+    Expects `eval_pred` as returned by the Trainer (logits, labels) and
+    returns a dictionary compatible with Trainer's expected metrics mapping.
+    """
+
     logits, labels = eval_pred
     preds = np.argmax(logits, axis=1)
-    precision, recall, f1, _ = precision_recall_fscore_support(labels, preds, average="weighted", zero_division=0)
+    precision, recall, f1, _ = precision_recall_fscore_support(
+        labels, preds, average="weighted", zero_division=0
+    )
     acc = accuracy_score(labels, preds)
     return {"accuracy": acc, "f1": f1, "precision": precision, "recall": recall}
 
@@ -112,6 +151,11 @@ class ConsoleLoggerCallback(TrainerCallback):
             f.write(s + "\n")
 
     def on_log(self, args, state, control, logs=None, **kwargs):
+        """Trainer callback hook for logging events.
+
+        Appends logged metrics to the configured logfile and prints to stdout.
+        """
+
         if logs is None:
             return
         s = f"[step {state.global_step}] " + json.dumps(logs)
@@ -119,6 +163,11 @@ class ConsoleLoggerCallback(TrainerCallback):
         self._append(s)
 
     def on_evaluate(self, args, state, control, metrics=None, **kwargs):
+        """Trainer callback hook invoked after evaluation.
+
+        Writes a short summary and key metrics to the logfile and stdout.
+        """
+
         s = f"=== Evaluation @ step {state.global_step}, epoch {state.epoch} ==="
         print(s, flush=True)
         self._append(s)
@@ -130,6 +179,13 @@ class ConsoleLoggerCallback(TrainerCallback):
 
 
 def save_classification_report_csv(report_dict, out_path: Path):
+    """Convert sklearn classification_report (output_dict=True) to CSV.
+
+    Args:
+        report_dict: Mapping returned by sklearn's classification_report(..., output_dict=True).
+        out_path: Destination CSV path.
+    """
+
     rows = []
     for key, vals in report_dict.items():
         if isinstance(vals, dict):
@@ -142,8 +198,23 @@ def save_classification_report_csv(report_dict, out_path: Path):
 
 
 def save_confusion_matrix(y_true, y_pred, out_csv: Path, out_png: Path, labels=None):
+    """Compute confusion matrix, save CSV and PNG heatmap, and return them.
+
+    Args:
+        y_true: True labels.
+        y_pred: Predicted labels.
+        out_csv: CSV output path for raw matrix.
+        out_png: PNG output path for heatmap visualization.
+        labels: Optional label ordering.
+
+    Returns:
+        Tuple of (confusion_matrix ndarray, DataFrame).
+    """
+
     cm = confusion_matrix(y_true, y_pred, labels=labels)
-    cm_df = pd.DataFrame(cm, index=labels if labels else None, columns=labels if labels else None)
+    cm_df = pd.DataFrame(
+        cm, index=labels if labels else None, columns=labels if labels else None
+    )
     cm_df.to_csv(out_csv, index=True)
     plt.figure(figsize=(6, 5))
     sns.heatmap(cm_df, annot=True, fmt="d", cmap="Blues")
@@ -156,7 +227,25 @@ def save_confusion_matrix(y_true, y_pred, out_csv: Path, out_png: Path, labels=N
     return cm, cm_df
 
 
-def extract_and_save_vectors(model, dataset, out_dir: Path, split_name: str, device, batch_size=8):
+def extract_and_save_vectors(
+    model, dataset, out_dir: Path, split_name: str, device, batch_size=8
+):
+    """Extract CLS hidden-state vectors for `dataset` and persist to files.
+
+    Args:
+        model: HF model with `output_hidden_states` available.
+        dataset: torch Dataset that yields batches with input_ids/attention_mask.
+        out_dir: Directory to write .npy files.
+        split_name: Name prefix for saved files (e.g., 'train').
+        device: Torch device to run inference on.
+        batch_size: Batch size used for extraction.
+
+    Returns:
+        Tuple of (vectors ndarray, labels ndarray).
+    """
+
+    # Use a DataLoader to iterate deterministically over the dataset and
+    # extract CLS token vectors in batches to keep memory usage bounded.
     loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
     all_vecs = []
     all_labels = []
@@ -168,13 +257,28 @@ def extract_and_save_vectors(model, dataset, out_dir: Path, split_name: str, dev
             if isinstance(labels, torch.Tensor):
                 all_labels.append(labels.cpu().numpy())
 
-            inputs = {k: v.to(device) for k, v in batch.items() if k in ("input_ids", "attention_mask")}
+            inputs = {
+                k: v.to(device)
+                for k, v in batch.items()
+                if k in ("input_ids", "attention_mask")
+            }
             outputs = model(**inputs, output_hidden_states=True, return_dict=True)
+            # The last hidden state is a sequence of token vectors; the
+            # convention for classification models is to use the first
+            # token's embedding (CLS) as a sentence-level representation.
             cls_vecs = outputs.hidden_states[-1][:, 0, :]
             all_vecs.append(cls_vecs.float().cpu().numpy())
 
-    vecs = np.concatenate(all_vecs, axis=0) if all_vecs else np.empty((0, model.config.hidden_size), dtype=np.float32)
-    labels_np = np.concatenate(all_labels, axis=0) if all_labels else np.empty((0,), dtype=np.int64)
+    vecs = (
+        np.concatenate(all_vecs, axis=0)
+        if all_vecs
+        else np.empty((0, model.config.hidden_size), dtype=np.float32)
+    )
+    labels_np = (
+        np.concatenate(all_labels, axis=0)
+        if all_labels
+        else np.empty((0,), dtype=np.int64)
+    )
 
     out_dir.mkdir(parents=True, exist_ok=True)
     np.save(out_dir / f"{split_name}_vectors.npy", vecs)
@@ -192,6 +296,12 @@ def main(
     grad_accum: int = GRAD_ACCUM,
     fp16: bool = FP16,
 ):
+    """Entrypoint for fine-tuning RoBERTa on processed BiasBios data.
+
+    This function orchestrates data loading, tokenization, Trainer setup
+    and the training loop. Artifacts are saved into `models_dir`.
+    """
+
     start_time = time.time()
 
     models_dir.mkdir(parents=True, exist_ok=True)
@@ -214,15 +324,23 @@ def main(
     test_dataset = Dataset.from_dict({"text": X_test, "label": y_test})
 
     def tokenize_function(examples):
-        return tokenizer(examples["text"], truncation=True, padding="max_length", max_length=128)
+        return tokenizer(
+            examples["text"], truncation=True, padding="max_length", max_length=128
+        )
 
     tokenized_train = train_dataset.map(tokenize_function, batched=True)
     tokenized_val = val_dataset.map(tokenize_function, batched=True)
     tokenized_test = test_dataset.map(tokenize_function, batched=True)
 
-    tokenized_train.set_format(type="torch", columns=["input_ids", "attention_mask", "label"])
-    tokenized_val.set_format(type="torch", columns=["input_ids", "attention_mask", "label"])
-    tokenized_test.set_format(type="torch", columns=["input_ids", "attention_mask", "label"])
+    tokenized_train.set_format(
+        type="torch", columns=["input_ids", "attention_mask", "label"]
+    )
+    tokenized_val.set_format(
+        type="torch", columns=["input_ids", "attention_mask", "label"]
+    )
+    tokenized_test.set_format(
+        type="torch", columns=["input_ids", "attention_mask", "label"]
+    )
 
     # Training arguments
     training_args = TrainingArguments(
@@ -262,6 +380,9 @@ def main(
     logger.info("Starting training")
     trainer.train()
 
+    # Trainer handles checkpointing, evaluation and logging based on
+    # TrainingArguments. We save the final model and tokenizer below.
+
     # Save model & tokenizer
     trainer.save_model(str(models_dir))
     tokenizer.save_pretrained(str(models_dir))
@@ -273,7 +394,9 @@ def main(
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Fine-tune RoBERTa on BiasBios processed data and produce reports")
+    parser = argparse.ArgumentParser(
+        description="Fine-tune RoBERTa on BiasBios processed data and produce reports"
+    )
     parser.add_argument("--model_id", type=str, default=MODEL_ID)
     parser.add_argument("--processed_dir", type=Path, default=DEFAULT_PROCESSED_DIR)
     parser.add_argument("--models_dir", type=Path, default=DEFAULT_MODELS_DIR)

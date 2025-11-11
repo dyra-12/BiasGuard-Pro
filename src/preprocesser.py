@@ -16,11 +16,8 @@ from typing import Dict, Optional, Tuple
 import numpy as np
 import pandas as pd
 import torch
-from sklearn.metrics import (
-    accuracy_score,
-    confusion_matrix,  # type: ignore
-    precision_recall_fscore_support,
-)
+from sklearn.metrics import confusion_matrix  # type: ignore
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support
 from torch.utils.data import DataLoader, Dataset
 from transformers import AutoTokenizer
 
@@ -59,7 +56,15 @@ class TextDataset(Dataset):
 
 
 def compute_metrics_from_preds(preds, labels):
-    """Compute basic classification metrics given preds and labels."""
+    """Compute basic binary classification metrics from predictions.
+
+    Args:
+        preds: Iterable of predicted class labels (0/1).
+        labels: Iterable of true class labels (0/1).
+
+    Returns:
+        Dict with keys: accuracy, precision, recall, f1.
+    """
 
     acc = accuracy_score(labels, preds)
     precision, recall, f1, _ = precision_recall_fscore_support(
@@ -74,11 +79,28 @@ def compute_metrics_from_preds(preds, labels):
 
 
 def save_json(obj, path: Path) -> None:
+    """Persist `obj` as JSON to `path`.
+
+    Args:
+        obj: JSON-serializable Python object.
+        path: Destination file path.
+    """
+
     with open(path, "w") as f:
         json.dump(obj, f, indent=2)
 
 
 def _detect_column(df: pd.DataFrame, candidates):
+    """Return the first column name in `candidates` that exists in `df`.
+
+    Args:
+        df: DataFrame to inspect.
+        candidates: Iterable of candidate column names in preference order.
+
+    Returns:
+        Matching column name or None if none found.
+    """
+
     return next((c for c in candidates if c in df.columns), None)
 
 
@@ -112,6 +134,17 @@ def _load_processed_dfs(
 def tokenize_texts(
     tokenizer: AutoTokenizer, texts, max_length: int = MAX_LENGTH
 ) -> dict:
+    """Tokenize a list of texts using the provided HuggingFace tokenizer.
+
+    Args:
+        tokenizer: HF tokenizer instance.
+        texts: Iterable of text strings.
+        max_length: Maximum token sequence length.
+
+    Returns:
+        Tokenizer encoding dict (input_ids, attention_mask, etc.).
+    """
+
     return tokenizer(
         list(texts), truncation=True, padding="max_length", max_length=max_length
     )
@@ -173,8 +206,13 @@ def get_dataloaders(
 
     # For test, rename detected label/text cols to canonical names to simplify downstream
     if test_text_col != "text":
+        # Normalize held-out test column names to the canonical 'text' to
+        # avoid branching logic downstream when loading the test split.
         test_df = test_df.rename(columns={test_text_col: "text"})
     if test_label_col != "label":
+        # Likewise ensure the held-out label column is simply 'label'. This
+        # keeps the loader code consistent even if BiasBios preserved
+        # additional legacy column names.
         test_df = test_df.rename(columns={test_label_col: "label"})
 
     # Tokenizer

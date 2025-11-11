@@ -13,8 +13,8 @@ Supported models and expected artifacts:
      * models/baselines/glove_svm_model.joblib (+ optional embeddings .kv)
 """
 
-from pathlib import Path
 import logging
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -34,28 +34,66 @@ except Exception:  # pragma: no cover
     KeyedVectors = None
 
 # Logger
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 
 # ------------------------- data helpers -------------------------
 def _detect_column(df: pd.DataFrame, candidates: List[str]) -> Optional[str]:
+    """Return the first column name from `candidates` that exists in `df`.
+
+    Args:
+        df: DataFrame to inspect.
+        candidates: Ordered list of candidate column names.
+
+    Returns:
+        Matching column name or None if not found.
+    """
+
     return next((c for c in candidates if c in df.columns), None)
 
 
-def load_biasbios_test(processed_dir: Path = Path("data/processed")) -> Tuple[List[str], List[int]]:
+def load_biasbios_test(
+    processed_dir: Path = Path("data/processed"),
+) -> Tuple[List[str], List[int]]:
+    """Load the held-out BiasBios test split and return texts and labels.
+
+    Args:
+        processed_dir: Directory containing processed CSVs.
+
+    Returns:
+        Tuple of (texts: List[str], labels: List[int]).
+    """
+
     test_path = processed_dir / "biasbios_test.csv"
     if not test_path.exists():
         raise FileNotFoundError(f"Missing test file: {test_path}")
     df = pd.read_csv(test_path)
-    text_col = _detect_column(df, ["text", "cleaned_text", "hard_text", "context", "sentence"]) or "text"
-    label_col = _detect_column(df, ["label", "label_binary", "bias_label", "binary_label"]) or "label"
+    text_col = (
+        _detect_column(df, ["text", "cleaned_text", "hard_text", "context", "sentence"])
+        or "text"
+    )
+    label_col = (
+        _detect_column(df, ["label", "label_binary", "bias_label", "binary_label"])
+        or "label"
+    )
     texts = df[text_col].astype(str).fillna("").tolist()
-    labels = pd.to_numeric(df[label_col], errors="coerce").fillna(0).astype(int).tolist()
+    labels = (
+        pd.to_numeric(df[label_col], errors="coerce").fillna(0).astype(int).tolist()
+    )
     return texts, labels
 
 
 def save_classification_report_csv(report_dict: Dict, out_path: Path) -> None:
+    """Serialize a sklearn classification_report (output_dict=True) to CSV.
+
+    Args:
+        report_dict: Classification report mapping returned by sklearn.
+        out_path: Destination path for the CSV file.
+    """
+
     rows = []
     for key, vals in report_dict.items():
         if isinstance(vals, dict):
@@ -68,18 +106,36 @@ def save_classification_report_csv(report_dict: Dict, out_path: Path) -> None:
 
 
 # ------------------------- model evaluators -------------------------
-def eval_transformer_model(model_dir: Path, texts: List[str], labels: List[int]) -> Dict:
+def eval_transformer_model(
+    model_dir: Path, texts: List[str], labels: List[int]
+) -> Dict:
+    """Evaluate a HuggingFace transformer model directory on given texts.
+
+    Loads tokenizer and model from `model_dir`, performs batched inference,
+    and returns sklearn-style classification report as a dict.
+    """
+
+    # Use GPU if available for faster batched inference
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     tokenizer = AutoTokenizer.from_pretrained(model_dir)
     model = AutoModelForSequenceClassification.from_pretrained(model_dir).to(device)
     model.eval()
 
     all_preds: List[int] = []
+    # Process texts in batches to avoid overly-large tensors and to keep
+    # memory usage stable on limited GPUs. We use a simple range step here
+    # rather than a DataLoader because the inputs are raw strings.
     with torch.no_grad():
         batch_size = 32
         for i in range(0, len(texts), batch_size):
             batch_texts = texts[i : i + batch_size]
-            enc = tokenizer(batch_texts, truncation=True, padding=True, max_length=256, return_tensors="pt")
+            enc = tokenizer(
+                batch_texts,
+                truncation=True,
+                padding=True,
+                max_length=256,
+                return_tensors="pt",
+            )
             enc = {k: v.to(device) for k, v in enc.items()}
             logits = model(**enc).logits
             preds = torch.argmax(logits, dim=-1).cpu().numpy().tolist()
@@ -89,7 +145,20 @@ def eval_transformer_model(model_dir: Path, texts: List[str], labels: List[int])
     return report
 
 
-def eval_tfidf_logreg(models_dir: Path, texts: List[str], labels: List[int]) -> Optional[Dict]:
+def eval_tfidf_logreg(
+    models_dir: Path, texts: List[str], labels: List[int]
+) -> Optional[Dict]:
+    """Evaluate a TF-IDF + LogisticRegression baseline if artifacts exist.
+
+    Args:
+        models_dir: Directory containing joblib artifacts.
+        texts: List of input texts.
+        labels: List of ground-truth labels.
+
+    Returns:
+        Classification report dict or None if artifacts/dependencies missing.
+    """
+
     if joblib is None:
         logger.warning("joblib not available; skipping tfidf_logreg evaluation")
         return None
@@ -105,7 +174,16 @@ def eval_tfidf_logreg(models_dir: Path, texts: List[str], labels: List[int]) -> 
     return report
 
 
-def eval_glove_svm(models_dir: Path, texts: List[str], labels: List[int]) -> Optional[Dict]:
+def eval_glove_svm(
+    models_dir: Path, texts: List[str], labels: List[int]
+) -> Optional[Dict]:
+    """Evaluate embedding+SVM baseline if model and embeddings are available.
+
+    The function attempts to load a precomputed gensim KeyedVectors file to
+    convert documents to mean-pooled vectors before applying a saved SVM.
+    Returns a sklearn-style classification report dict or None on failure.
+    """
+
     if joblib is None:
         logger.warning("joblib not available; skipping glove_svm evaluation")
         return None
@@ -123,10 +201,15 @@ def eval_glove_svm(models_dir: Path, texts: List[str], labels: List[int]) -> Opt
     emb_dim = int(getattr(kv, "vector_size", 300))
 
     def doc_to_vec(text: str) -> np.ndarray:
+        # Convert a document to a mean-pooled embedding. Words not present
+        # in the KeyedVectors are skipped. This simple aggregation is
+        # commonly used for classical baselines but loses word-order.
         words = str(text).split()
         vecs = [kv[w] for w in words if w in kv.key_to_index]
         if vecs:
             return np.mean(vecs, axis=0)
+        # Fallback to a zero-vector when no words are present in the
+        # embedding vocabulary so the classifier can still process the row.
         return np.zeros((emb_dim,), dtype=np.float32)
 
     X = np.vstack([doc_to_vec(t) for t in texts])
@@ -137,7 +220,11 @@ def eval_glove_svm(models_dir: Path, texts: List[str], labels: List[int]) -> Opt
 
 # ------------------------- discovery & driver -------------------------
 def discover_models() -> Dict[str, Path]:
-    """Return mapping of model_name -> path/artifacts root to evaluate."""
+    """Discover available model artifact locations in the repository.
+
+    Returns:
+        Mapping of short model name -> Path to artifacts root.
+    """
     registry: Dict[str, Path] = {}
 
     # Transformers dirs
@@ -164,6 +251,10 @@ def discover_models() -> Dict[str, Path]:
 
 
 def main():
+    """CLI entrypoint: discover models, evaluate them on held-out data and
+    write classification reports to `results/`.
+    """
+
     results_dir = Path("results")
     results_dir.mkdir(parents=True, exist_ok=True)
 
@@ -189,7 +280,9 @@ def main():
                 report = None
 
             if report is None:
-                logger.warning("Skipping %s due to missing artifacts or dependencies", name)
+                logger.warning(
+                    "Skipping %s due to missing artifacts or dependencies", name
+                )
                 continue
 
             out_csv = results_dir / f"classification_report_{name}.csv"
@@ -201,4 +294,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

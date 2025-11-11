@@ -18,19 +18,24 @@ It trains a LinearSVC on mean-pooled word embeddings and persists:
 If embedding loading fails, the script exits gracefully.
 """
 
-from pathlib import Path
+import argparse
 import json
 import logging
-import argparse
-
-import numpy as np
-import pandas as pd
-import joblib
-from sklearn.svm import LinearSVC
-from sklearn.metrics import classification_report, accuracy_score, precision_score, recall_score, f1_score
+from pathlib import Path
 
 import gensim.downloader as api
+import joblib
+import numpy as np
+import pandas as pd
 from gensim.models import KeyedVectors
+from sklearn.metrics import (
+    accuracy_score,
+    classification_report,
+    f1_score,
+    precision_score,
+    recall_score,
+)
+from sklearn.svm import LinearSVC
 
 # Configuration
 DEFAULT_PROCESSED_DIR = Path("data/processed")
@@ -38,11 +43,26 @@ DEFAULT_MODELS_DIR = Path("models/baselines")
 DEFAULT_RESULTS_DIR = Path("results")
 SEED = 42
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 
 def _detect_column(df: pd.DataFrame, candidates):
+    """Return the first candidate column name present in `df`.
+
+    This helper centralizes the common pattern of trying multiple possible
+    column names for text/label fields so callers can remain simple.
+
+    Args:
+        df: DataFrame to inspect.
+        candidates: Iterable of candidate column names in preference order.
+
+    Returns:
+        The first matching column name or ``None`` if none found.
+    """
+
     return next((c for c in candidates if c in df.columns), None)
 
 
@@ -64,6 +84,16 @@ def load_processed_datasets(processed_dir: Path):
 
 
 def prepare_xy(df: pd.DataFrame, role: str = "train"):
+    """Detect text and label columns and return (X:list[str], y:list[int]).
+
+    Args:
+        df: DataFrame containing text and label fields.
+        role: Human-readable role string used in error messages (train/val/test).
+
+    Returns:
+        Tuple of (X, y) where X is a list of strings and y a list of ints.
+    """
+
     text_candidates = ["text", "cleaned_text", "hard_text", "context", "sentence"]
     label_candidates = ["label", "label_binary", "bias_label", "binary_label"]
 
@@ -71,10 +101,17 @@ def prepare_xy(df: pd.DataFrame, role: str = "train"):
     label_col = _detect_column(df, label_candidates)
 
     if text_col is None:
-        raise ValueError(f"Could not detect a text column in {role} DataFrame. Columns: {list(df.columns)}")
+        raise ValueError(
+            f"Could not detect a text column in {role} DataFrame. Columns: {list(df.columns)}"
+        )
     if label_col is None:
-        logger.warning("No label column found in %s set; classification/training requires labels.", role)
-        raise ValueError(f"Could not detect a label column in {role} DataFrame. Columns: {list(df.columns)}")
+        logger.warning(
+            "No label column found in %s set; classification/training requires labels.",
+            role,
+        )
+        raise ValueError(
+            f"Could not detect a label column in {role} DataFrame. Columns: {list(df.columns)}"
+        )
 
     X = df[text_col].astype(str).tolist()
     y = pd.to_numeric(df[label_col], errors="coerce").fillna(0).astype(int).tolist()
@@ -84,13 +121,21 @@ def prepare_xy(df: pd.DataFrame, role: str = "train"):
 def compute_metrics(y_true, y_pred):
     return {
         "accuracy": float(accuracy_score(y_true, y_pred)),
-        "precision_weighted": float(precision_score(y_true, y_pred, average="weighted", zero_division=0)),
-        "recall_weighted": float(recall_score(y_true, y_pred, average="weighted", zero_division=0)),
-        "f1_weighted": float(f1_score(y_true, y_pred, average="weighted", zero_division=0)),
+        "precision_weighted": float(
+            precision_score(y_true, y_pred, average="weighted", zero_division=0)
+        ),
+        "recall_weighted": float(
+            recall_score(y_true, y_pred, average="weighted", zero_division=0)
+        ),
+        "f1_weighted": float(
+            f1_score(y_true, y_pred, average="weighted", zero_division=0)
+        ),
     }
 
 
-def save_predictions_and_metrics(model_name: str, y_true, y_pred, texts, results_dir: Path):
+def save_predictions_and_metrics(
+    model_name: str, y_true, y_pred, texts, results_dir: Path
+):
     results_dir.mkdir(parents=True, exist_ok=True)
     preds_df = pd.DataFrame({"y_true": y_true, "y_pred": y_pred, "text": texts})
     preds_out = results_dir / f"{model_name}_predictions.csv"
@@ -143,6 +188,21 @@ def load_embedding_model():
 
 
 def document_to_vector(text: str, embedding_model, embedding_dim: int):
+    """Convert a document to a single mean-pooled embedding vector.
+
+    Words not present in the embedding vocabulary are skipped. When no
+    known words are present the function returns a zero-vector to avoid
+    failing downstream classifiers.
+
+    Args:
+        text: Input string.
+        embedding_model: Gensim KeyedVectors-like object.
+        embedding_dim: Expected embedding dimensionality.
+
+    Returns:
+        1D NumPy array of length embedding_dim.
+    """
+
     if not text:
         return np.zeros(embedding_dim, dtype=np.float32)
     words = text.split()
@@ -157,13 +217,24 @@ def document_to_vector(text: str, embedding_model, embedding_dim: int):
 
 
 def texts_to_vectors(texts, embedding_model, embedding_dim=300):
+    """Batch-convert a list of texts to an (n_texts, embedding_dim) array.
+
+    This wrapper pre-allocates the array for efficiency and calls
+    ``document_to_vector`` for each row.
+    """
+
     vectors = np.zeros((len(texts), embedding_dim), dtype=np.float32)
     for i, t in enumerate(texts):
         vectors[i] = document_to_vector(t, embedding_model, embedding_dim)
     return vectors
 
 
-def main(processed_dir: Path = DEFAULT_PROCESSED_DIR, models_dir: Path = DEFAULT_MODELS_DIR, results_dir: Path = DEFAULT_RESULTS_DIR, seed: int = SEED):
+def main(
+    processed_dir: Path = DEFAULT_PROCESSED_DIR,
+    models_dir: Path = DEFAULT_MODELS_DIR,
+    results_dir: Path = DEFAULT_RESULTS_DIR,
+    seed: int = SEED,
+):
     np.random.seed(seed)
 
     models_dir.mkdir(parents=True, exist_ok=True)
@@ -214,11 +285,18 @@ def main(processed_dir: Path = DEFAULT_PROCESSED_DIR, models_dir: Path = DEFAULT
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="GloVe/Word2Vec + LinearSVC baseline on BiasBios processed data")
+    parser = argparse.ArgumentParser(
+        description="GloVe/Word2Vec + LinearSVC baseline on BiasBios processed data"
+    )
     parser.add_argument("--processed_dir", type=Path, default=DEFAULT_PROCESSED_DIR)
     parser.add_argument("--models_dir", type=Path, default=DEFAULT_MODELS_DIR)
     parser.add_argument("--results_dir", type=Path, default=DEFAULT_RESULTS_DIR)
     parser.add_argument("--seed", type=int, default=SEED)
     args = parser.parse_args()
 
-    main(processed_dir=args.processed_dir, models_dir=args.models_dir, results_dir=args.results_dir, seed=args.seed)
+    main(
+        processed_dir=args.processed_dir,
+        models_dir=args.models_dir,
+        results_dir=args.results_dir,
+        seed=args.seed,
+    )

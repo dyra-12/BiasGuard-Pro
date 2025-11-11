@@ -187,9 +187,17 @@ def load_and_prepare(
     # dataset. Use 'label_binary' as the canonical label when present; this
     # ensures training uses the binary gendered label consistently.
     if "label_binary" in bias_part.columns:
-        bias_part["label"] = pd.to_numeric(bias_part["label_binary"], errors="coerce").fillna(0).astype(float)
+        bias_part["label"] = (
+            pd.to_numeric(bias_part["label_binary"], errors="coerce")
+            .fillna(0)
+            .astype(float)
+        )
     else:
-        bias_part["label"] = pd.to_numeric(bias_part[bias_label_col], errors="coerce").fillna(0).astype(float)
+        bias_part["label"] = (
+            pd.to_numeric(bias_part[bias_label_col], errors="coerce")
+            .fillna(0)
+            .astype(float)
+        )
 
     # For synthetic rows, build a DataFrame with the same biasbios columns filled with NA
     synthetic_part = pd.DataFrame(columns=desired_biasbios_cols)
@@ -208,8 +216,9 @@ def load_and_prepare(
         [bias_part[desired_biasbios_cols + ["label", "source"]], synthetic_part],
         ignore_index=True,
     )
-    combined_pool = combined_pool.sample(frac=1, random_state=seed).reset_index(drop=True)
-
+    combined_pool = combined_pool.sample(frac=1, random_state=seed).reset_index(
+        drop=True
+    )
     # Fill missing BiasBios-specific binary label for synthetic rows by
     # copying the canonical 'label' into 'label_binary' where absent. This
     # ensures the 'label_binary' column is populated for all training rows
@@ -224,6 +233,10 @@ def load_and_prepare(
     else:
         combined_pool["label_binary"] = combined_pool["label"].astype(int)
 
+    # At this point combined_pool contains both BiasBios and synthetic rows
+    # with a unified schema. The 'source' column lets downstream tools split
+    # or filter on origin when needed (e.g., computing domain-specific stats).
+
     stratify_pool = (
         combined_pool["label"] if combined_pool["label"].nunique() > 1 else None
     )
@@ -234,6 +247,13 @@ def load_and_prepare(
 
     # Drop rows with missing critical fields (text or label) and report by source
     def _clean(df_in: pd.DataFrame, name: str) -> pd.DataFrame:
+        """Remove rows with missing critical fields and normalize types.
+
+        This inner helper is small and used only during preparation. It logs
+        a summary of dropped rows grouped by source to aid debugging of
+        data quality issues.
+        """
+
         dfc = df_in.copy()
         # Ensure types
         dfc["label"] = pd.to_numeric(dfc["label"], errors="coerce")
@@ -322,7 +342,9 @@ def main() -> None:
 
     # Ensure dtypes are consistent
     train_save["text"] = train_save["text"].astype(str)
-    train_save["label"] = pd.to_numeric(train_save["label"], errors="coerce").astype(int)
+    train_save["label"] = pd.to_numeric(train_save["label"], errors="coerce").astype(
+        int
+    )
     val_save["text"] = val_save["text"].astype(str)
     val_save["label"] = pd.to_numeric(val_save["label"], errors="coerce").astype(int)
 

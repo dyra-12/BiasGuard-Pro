@@ -202,6 +202,23 @@ Questions / collaboration:
 - Feature requests & model cards welcome.
 
 ---
+## Regenerate Figures
+
+If you'd like to quickly regenerate the PNG figures from `results/metrics_per_model.csv`, there is a Makefile target that runs the plotting script. From the repository root run:
+
+```bash
+make figures
+```
+
+Or run the script directly:
+
+```bash
+python3 scripts/plot_metrics.py
+```
+
+The PNG files will be written to the `figures/` directory.
+
+---
 ## Appendix: Additional Commands
 
 Inspect help for scripts:

@@ -130,9 +130,6 @@ Source: `results/paired_tests_summary.csv`
 
 Interpretation: Extremely low McNemar p-values indicate statistically significant differences in error patterns between BiasGuard and each baseline. Positive mean differences suggest BiasGuard assigns higher calibrated probability to the true class vs classical baselines (except CDA which slightly overestimates negative class confidence). Effect sizes (Cohen's g) remain modest; practical significance aligns with observed F1/accuracy gains, not just random variance.
 
-### 4. Debias CDA Detailed Report (Excerpt)
-From `results/debias_cda_classification_report.csv`: accuracy 0.9278; macro F1 0.8926; weighted F1 0.9265.
-
 ---
 ---
 ## Performance & Optimization Summary
@@ -200,7 +197,7 @@ If you use BiasGuard Pro in research, please cite:
 Licensed under the terms stated in `LICENSE` (check file for details).
 
 Questions / collaboration:
-- Maintainer: <YOUR_EMAIL@domain.com>
+- Maintainer: dyutidasmahaptra@gmail.com
 - Issues: GitHub Issues tab
 - Feature requests & model cards welcome.
 

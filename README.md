@@ -93,6 +93,7 @@ Optional flags (see each script `--help`) control batch size, sequence length, m
 ## Detailed Results
 
 ### 1. Classification Metrics (BiasBios Test)
+
 Source: `results/metrics_per_model.csv`
 
 | Model | Accuracy | Precision | Recall | F1 | ROC-AUC |
@@ -102,6 +103,33 @@ Source: `results/metrics_per_model.csv`
 | RoBERTa Baseline | 0.8745 | 0.7482 | 0.6637 | 0.7034 | 0.9031 |
 | TF-IDF Logistic | 0.8820 | 0.6983 | 0.8340 | 0.7601 | 0.9405 |
 | GloVe + SVM | 0.8016 | 0.5380 | 0.8167 | 0.6487 | 0.9305 |
+
+Visualizations of the table above (derived from `results/metrics_per_model.csv`):
+
+<p align="center">
+<img src="figures/summary/model_performance_comparison.png" alt="Model comparison across Accuracy, Precision, Recall, F1 and ROC-AUC (visualization of the table above)" style="max-width:100%;height:auto;">
+</p>
+
+Figure: Model comparison across Accuracy, Precision, Recall, F1 and ROC-AUC.
+
+Observations (model_performance_comparison.png):
+
+- CDA and BiasGuard Pro consistently lead across all metrics, with ROC‑AUC near 0.96–0.97. BiasGuard Pro shows the most stable recall and precision and achieves a slightly higher F1 score than CDA.
+- TF‑IDF Logistic Regression performs surprisingly well on recall and ROC‑AUC despite being a simpler model.
+- RoBERTa demonstrates decent accuracy but comparatively lower recall, which reduces its F1.
+- GloVe + SVM trails in most metrics, confirming its limited effectiveness.
+
+<p align="center">
+<img src="figures/summary/accuracy_by_model.png" alt="Accuracy per model (visualization of the table above)" style="max-width:60%;height:auto;">
+</p>
+
+Figure: Accuracy per model.
+
+Observations (accuracy_per_model.png):
+
+- CDA (0.928) achieved the highest accuracy, slightly outperforming BiasGuard Pro (0.923).
+- TF‑IDF Logistic Regression (0.882) performed competitively for a classical model.
+- GloVe + SVM (0.802) lagged behind, showing the weakest accuracy among the compared models.
 
 Interpretation: BiasGuard Pro attains a strong balance of precision and recall relative to classical baselines; CDA edges slightly higher overall accuracy via augmentation but with lower recall for the positive (biased) class relative to its precision.
 
@@ -129,6 +157,8 @@ Source: `results/paired_tests_summary.csv`
 | GloVe SVM | 0.0 | 3134.87 | 0.1209 | 0.2088 | 0.0 | 0.5616 |
 
 Interpretation: Extremely low McNemar p-values indicate statistically significant differences in error patterns between BiasGuard and each baseline. Positive mean differences suggest BiasGuard assigns higher calibrated probability to the true class vs classical baselines (except CDA which slightly overestimates negative class confidence). Effect sizes (Cohen's g) remain modest; practical significance aligns with observed F1/accuracy gains, not just random variance.
+
+For deeper analysis, visual diagnostics, and additional discussion, see the notebook `notebooks/Bias_Detection_Model_Evaluation.ipynb`.
 
 ---
 ---

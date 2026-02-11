@@ -1,8 +1,6 @@
 
 # BiasGuard Pro: Auditing and Mitigating Gendered Stereotypes in Career Recommendation Texts
 
----
-
 ## Overview
 
 BiasGuard Pro is a research framework for identifying and auditing gendered stereotypes in professional and career recommendation text. The system is designed to support human interpretation and judgment in fairness-sensitive contexts, rather than to provide automated enforcement or decision-making.

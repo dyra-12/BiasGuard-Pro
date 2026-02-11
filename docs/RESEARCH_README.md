@@ -29,6 +29,7 @@ Start here for a conceptual overview, then explore:
 - **`docs/EXPLAINABILITY.md`** — Explanation design as cognitive support
 - **`docs/INTERFACE.md`** — Interaction design and trust calibration
 - **`docs/ETHICS.md`** — Responsible use, scope, and ethical positioning
+- **`docs/REPRODUIBILITY.md`** — Guide for Reproducibility 
 
 ---
 
@@ -164,6 +165,7 @@ https://huggingface.co/spaces/Dyra1204/BiasXplainer
 │   ├── EXPLAINABILITY.md
 │   ├── INTERFACE.md
 │   └── ETHICS.md
+│   └── REPRODUIBILITY.md
 ├── src/
 ├── notebooks/
 ├── assets/

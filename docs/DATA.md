@@ -74,7 +74,7 @@ BiasBios provides continuous bias association scores rather than binary labels. 
 
 - Top 20% of gender-association scores → Biased
 - Bottom 20% → Unbiased
-- Middle 60% → Excluded from labeling
+- Middle 60% → Treated as neutral for binarized classification, focusing the learning objective on clearer bias signals.
 
 This choice focuses training on clear bias signals, reducing noise from ambiguous stylistic variation.
 

@@ -81,7 +81,7 @@ Readers seeking full technical, methodological, and ethical detail may consult:
 - **Explainability design**: `docs/EXPLAINABILITY.md`
 - **Interaction rationale**: `docs/INTERFACE.md`
 - **Ethical considerations**: `docs/ETHICS.md`
-
+- **Reproducibility Guide**: `docs/REPRODUIBILITY.md`
 ---
 
 ## Intended Scope
@@ -106,6 +106,6 @@ Citation details are provided in `CITATION.cff`.
 
 ---
 
-**Project Status**: Active research  
+**Project Status**: Completed research  
 **Primary Domain**: Career recommendation and professional discourse  
 **Design Orientation**: Human-centered, interpretability-first fairness auditing

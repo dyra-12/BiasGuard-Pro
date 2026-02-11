@@ -29,7 +29,7 @@ BiasGuard Pro follows a five-stage pipeline, with each stage designed to support
 4. **Interaction Layer**
 5. **Evaluation & Feedback Loop**
 
-These stages are loosely coupled but semantically aligned, enabling independent improvement without disrupting the overall system.
+These stages are modular at the system level but functionally coordinated, allowing individual components to be refined or extended without requiring architectural redesign of the entire pipeline.
 
 ---
 

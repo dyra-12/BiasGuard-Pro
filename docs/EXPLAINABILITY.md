@@ -115,11 +115,7 @@ Counterfactual explanations support this by showing minimal, semantically cohere
 3. Re-evaluate bias probability
 4. Refine fluency using a lightweight language model
 
-Each counterfactual is validated to ensure:
-
-- Reduced bias score
-- Preserved semantic intent
-- Linguistic coherence
+Each counterfactual is re-evaluated by the model to confirm reduced bias probability.
 
 ### 5.3 Role in Bias Mitigation
 

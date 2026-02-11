@@ -1,0 +1,31 @@
+cff-version: 1.2.0
+message: "If you use this software or its associated research, please cite it using the metadata below."
+title: "BiasGuard Pro: A Human-Centered Framework for Auditing and Mitigating Gendered Bias in Career Recommendation Systems"
+authors:
+  - family-names: Dasmahapatra
+    given-names: Dyuti
+    affiliation: Independent Researcher
+    country: India
+repository-code: "https://github.com/dyra-12/BiasGuard-Pro"
+url: "https://github.com/dyra-12/BiasGuard-Pro"
+license: MIT
+keywords:
+  - algorithmic fairness
+  - gender bias
+  - explainable AI
+  - human-centered AI
+  - NLP
+  - bias auditing
+  - counterfactual explanations
+  - SHAP
+  - career recommendation systems
+version: "1.0.0"
+date-released: "2025-01-01"
+preferred-citation:
+  type: article
+  title: "BiasGuard Pro: A Human-Centered Framework for Auditing and Mitigating Gendered Stereotypes in Career Recommendation Systems"
+  authors:
+    - family-names: Dasmahapatra
+      given-names: Dyuti
+  year: 2025
+  url: "https://github.com/dyra-12/BiasGuard-Pro"

@@ -1,6 +1,12 @@
 # BiasGuard Pro
 
+<<<<<<< HEAD
 **A human-centered framework for auditing gendered bias in career recommendation systems.**
+=======
+# BiasGuard Pro: Auditing and Mitigating Gendered Stereotypes in Career Recommendation Texts
+
+BiasGuard Pro is an open-source framework for detecting, explaining, and mitigating gendered stereotypes in career-related language. It integrates a lightweight transformer backbone (DistilBERT), multi-modal explainability (token-level SHAP and text counterfactual generation via DiCE-like perturbations), statistical validation, and an extensible experiment harness to benchmark against classical and transformer baselines. The repository ships with trained models, evaluation scripts, cross-dataset benchmarking (BiasBios + StereoSet Gender), and a prototype audit demo.
+>>>>>>> c9b09eaade110666bdd8e125b4ca4302d12c7edd
 
 ---
 

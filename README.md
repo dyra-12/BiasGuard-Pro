@@ -66,7 +66,7 @@ Results indicate that interpretability and fairness robustness can be achieved w
 An interactive demonstration of the auditing interface is available:
 
 🔗 **Hugging Face Space**  
-https://huggingface.co/spaces/Dyra1204/BiasXplainer
+https://huggingface.co/spaces/Dyra1204/BiasGuard-Pro
 
 ---
 

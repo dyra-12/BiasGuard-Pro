@@ -150,7 +150,7 @@ See **`docs/ETHICS.md`** for full discussion.
 A hosted demo reproducing the human-centered auditing interface is available:
 
 **Hugging Face Space:**  
-https://huggingface.co/spaces/Dyra1204/BiasXplainer
+https://huggingface.co/spaces/Dyra1204/BiasGuard-Pro
 
 ---
 

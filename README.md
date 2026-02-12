@@ -2,7 +2,7 @@
 ## Overview
 
 BiasGuard Pro is a research framework for identifying and auditing gendered stereotypes in professional and career recommendation text. The system is designed to support human interpretation and judgment in fairness-sensitive contexts, rather than to provide automated enforcement or decision-making.
-The framework integrates a lightweight bias detection model with interpretable explanations and interaction-level design principles drawn from Human-Centered AI (HCAI) and Explainable AI (XAI).
+The framework integrates a lightweight bias detection model with interpretable explanations and interaction-level design principles drawn from Human-Centered AI (HCAI) and Explainable AI (XAI). BiasGuard Pro explores how fairness auditing can be designed as an interactive human reasoning workflow rather than a static classification output.
 
 ---
 ## Motivation
@@ -11,7 +11,7 @@ Existing bias detection tools often prioritize benchmark performance while offer
 - Interpretability
 - Trust calibration
 - Human-in-the-loop reasoning
-BiasGuard Pro addresses this gap by reframing bias auditing as an **interpretive, human-centered process** rather than a fully automated classification task.
+
 ---
 ## Conceptual Contribution
 Most bias detection systems focus on determining **whether** content is biased. BiasGuard Pro emphasizes **how humans reason** about bias signals once they are surfaced.
@@ -58,7 +58,7 @@ Readers seeking full technical, methodological, and ethical detail may consult:
 - **Explainability design**: `docs/EXPLAINABILITY.md`
 - **Interaction rationale**: `docs/INTERFACE.md`
 - **Ethical considerations**: `docs/ETHICS.md`
-- **Reproducibility Guide**: `docs/REPRODUIBILITY.md`
+- **Reproducibility Guide**: `docs/REPRODUCIBILITY.md`
 ---
 ## Intended Scope
 ### Intended for:
